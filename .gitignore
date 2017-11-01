@@ -1,5 +1,6 @@
 ### Custom
-release/
+Release/
+Debug/
 
 ### CMake.gitignore
 CMakeCache.txt
