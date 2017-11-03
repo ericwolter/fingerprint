@@ -28,26 +28,24 @@ void printHash(const unsigned char *hash, const int size) {
   printf("\n");
 }
 
+double luminosity(const int red, const int green, const int blue) {
+  // based on ITU-R 601-2
+  return 299.0 / 1000 * red + 587.0 / 1000 * green + 114.0 / 1000 * blue;
+}
+
 double *grayscale(const unsigned char *colorImage, const int width,
                   const int height, const int comp) {
   // printf("Converting to grayscale...\n");
   double *grayImage = (double *)malloc(sizeof(double) * width * height);
 
-  unsigned char red, green, blue = 0;
+  unsigned char red, green, blue;
   for (int r = 0; r < height; r++) {
     for (int c = 0; c < width; c++) {
       red = colorImage[r * width + c * comp + 0];
       green = colorImage[r * width + c * comp + 1];
       blue = colorImage[r * width + c * comp + 2];
 
-      // average method
-      // grayImage[r * width + c] = (red + green + blue) / 3.0f;
-      // luminosity method
-      // grayImage[r * width + c] = (0.21 * red + 0.72 * green + 0.07 * blue);
-      grayImage[r * width + c] =
-          floor(299.0 / 1000 * red + 587.0 / 1000 * green +
-                114.0 / 1000 * blue) /
-          255.0;
+      grayImage[r * width + c] = floor(luminosity(red, green, blue)) / 255.0;
     }
   }
 
@@ -57,7 +55,6 @@ double *grayscale(const unsigned char *colorImage, const int width,
 unsigned char *reduceSize(const unsigned char *image, const int width,
                           const int height, const int channels,
                           const int scale) {
-  printf("Reducing size to %ix%i...\n", scale, scale);
   unsigned char *scaled =
       (unsigned char *)malloc(sizeof(unsigned char) * scale * scale * channels);
   int err = stbir_resize_uint8(image, width, height, 0, scaled, scale, scale, 0,
@@ -69,8 +66,6 @@ unsigned char *reduceSize(const unsigned char *image, const int width,
 }
 
 void computeHaarWavelet(double *img, const int width, const int stride) {
-
-  // printf("Row by row...\n");
   double *section = (double *)malloc(sizeof(double) * stride * stride);
   for (int r = 0; r < stride; r++) {
     for (int c = 0; c < stride; c++) {
@@ -87,20 +82,14 @@ void computeHaarWavelet(double *img, const int width, const int stride) {
       const int dtr = r;
       const int dtc = stride / 2 + c / 2;
 
-      // printf("compute average at %i:%i=%f and %i:%i=%f and update at
-      // %i:%i\n",r,c,img(r, c),r,c+1,img(r, c + 1),atr,atc);  printf("compute
-      // difference at %i:%i=%f and %i:%i=%f and update at %i:%i\n",r,c,img(r,
-      // c),r,c+1,img(r, c + 1), dtr, dtc);
       average = (section(r, c) + section(r, c + 1));
       difference = (section(r, c) - section(r, c + 1));
 
       img(atr, atc) = average;
       img(dtr, dtc) = difference;
     }
-    // printImage(img, width, width);
   }
 
-  // printf("Column by column...\n");
   for (int r = 0; r < stride; r++) {
     for (int c = 0; c < stride; c++) {
       section(r, c) = img(r, c);
@@ -114,17 +103,12 @@ void computeHaarWavelet(double *img, const int width, const int stride) {
       const int dtr = stride / 2 + r / 2;
       const int dtc = c;
 
-      // printf("compute average at %i:%i=%f and %i:%i=%f and update at
-      // %i:%i\n",r,c,img(r, c),r,c+1,img(r + 1, c),atr,atc); printf("compute
-      // difference at %i:%i=%f and %i:%i=%f and update at %i:%i\n",r,c,img(r,
-      // c),r,c+1,img(r + 1, c), dtr, dtc);
       average = (section(r, c) + section(r + 1, c)) / 2.0f;
       difference = (section(r, c) - section(r + 1, c)) / 2.0f;
 
       img(atr, atc) = average;
       img(dtr, dtc) = difference;
     }
-    // printImage(img, width, height);
   }
 
   free(section);
@@ -132,7 +116,6 @@ void computeHaarWavelet(double *img, const int width, const int stride) {
 
 double *createHaarImage(double *img, const int width, const int height,
                         const int level) {
-  printf("Creating haar image...\n");
   double *haar = (double *)malloc(sizeof(double) * width * height);
   memcpy(haar, img, sizeof(double) * width * height);
 
@@ -148,7 +131,6 @@ double *createHaarImage(double *img, const int width, const int height,
   // # 8 ->   2 ->   1x1
   for (int l = 0; l < level; l++) {
     int stride = (int)(size / pow(2, l) + 1e-9);
-    // printf("Computing level %i with stride %i\n", l, stride);
     computeHaarWavelet(haar, width, stride);
   }
 
@@ -157,7 +139,6 @@ double *createHaarImage(double *img, const int width, const int height,
 
 unsigned char *loadRGBImage(int *err, const char *filepath, int *width,
                             int *height, int *channels) {
-  printf("Loading RGB image...\n");
   *channels = 3;
   unsigned char *image = stbi_load(filepath, width, height, NULL, *channels);
   if (!image) {
@@ -269,104 +250,12 @@ unsigned char *getFingerprint(int *err, const char *filepath, int hashSize) {
       fingerprint[(r) * (stride) + (c)] = haar[(r)*scale + (c)];
     }
   }
-  printImage(fingerprint, hashSize, 1);
-  // fingerprint[0] = 0.0;
-  printImage(fingerprint, hashSize, 1);
   unsigned char *hash = quantifyMedian(fingerprint, hashSize);
   free(fingerprint);
-  printHash(hash, hashSize);
 
   // 6. Normalization
 
-  // printf("Computing fingerprint for %s\n", filepath);
-
-  // double *fingerprint = (double*)malloc(sizeof(double) * hashSize);
-  // for (int r = 0; r < stride; r++) {
-  //   for (int c = 0; c < stride; c++) {
-  //     fingerprint[(r)*(stride) + (c)] = haar[(r)*scale + (c)];
-  //   }
-  // }
-  // free(haar);
-  // printImage(fingerprint, hashSize, 1);
-  //
-  // // normalize fingerprint
-  // double old_min = 255;
-  // double old_max = -255;
-  // double f = 0;
-  // for (int i = 0; i < hashSize; i++) {
-  //   f = fingerprint[i];
-  //   if (f > old_max) {
-  //     old_max = f;
-  //   }
-  //   if (f < old_min) {
-  //     old_min = f;
-  //   }
-  // }
-  // double old_range = old_max - old_min + 0.00001f;
-  // for (int i = 0; i < hashSize; i++) {
-  //   fingerprint[i] = (fingerprint[i] - old_min) / old_range;
-  // }
-  // printImage(fingerprint, hashSize, 1);
-
   return hash;
-}
-
-void test() {
-  double *arr = (double *)malloc(sizeof(double) * 16);
-  arr[0] = 100;
-  arr[1] = 50;
-  arr[2] = 60;
-  arr[3] = 150;
-  arr[4] = 20;
-  arr[5] = 60;
-  arr[6] = 40;
-  arr[7] = 30;
-  arr[8] = 50;
-  arr[9] = 90;
-  arr[10] = 70;
-  arr[11] = 82;
-  arr[12] = 74;
-  arr[13] = 66;
-  arr[14] = 90;
-  arr[15] = 58;
-
-  printImage(arr, 4, 4);
-
-  computeHaarWavelet(arr, 4, 4);
-  printImage(arr, 4, 4);
-  computeHaarWavelet(arr, 4, 2);
-  printImage(arr, 4, 4);
-
-  int hashSize = 16;
-  int stride = (int)(sqrt(hashSize) + 1e-9);
-  double *fingerprint = (double *)malloc(sizeof(double) * hashSize);
-  for (int r = 0; r < stride; r++) {
-    for (int c = 0; c < stride; c++) {
-      fingerprint[(r) * (stride) + (c)] = arr[(r)*4 + (c)];
-    }
-  }
-  printImage(fingerprint, 16, 1);
-
-  double old_min = 255;
-  double old_max = -255;
-  double f = 0;
-  for (int i = 0; i < hashSize; i++) {
-    f = fingerprint[i];
-    if (f > old_max) {
-      old_max = f;
-    }
-    if (f < old_min) {
-      old_min = f;
-    }
-  }
-  double old_range = old_max - old_min;
-  for (int i = 0; i < hashSize; i++) {
-    fingerprint[i] = (fingerprint[i] - old_min) / old_range;
-  }
-  printImage(fingerprint, hashSize, 1);
-
-  free(fingerprint);
-  free(arr);
 }
 
 int main(int argc, char *argv[]) {
@@ -374,17 +263,17 @@ int main(int argc, char *argv[]) {
     printf("Usage: %s <image1.jpg> <image2.jpg>\n", argv[0]);
     return 2;
   }
-  // test();
-  // return 0;
 
   int hashSize = 64;
   int err = 0;
   unsigned char *hash1 = getFingerprint(&err, argv[1], hashSize);
-  if (err)
+  if (err) {
     return err;
+  }
   unsigned char *hash2 = getFingerprint(&err, argv[2], hashSize);
-  if (err)
+  if (err) {
     return err;
+  }
 
   double diff = 0;
   for (int i = 0; i < hashSize; i++) {
@@ -392,19 +281,7 @@ int main(int argc, char *argv[]) {
       diff += 1;
     }
   }
-  printf("SIM: %.5f\n", 1 - (diff / hashSize));
-
-  // double diff_l1 = 0;
-  // for (int i = 0; i < hashSize; i++) {
-  //   diff_l1 += fabs(fingerprint1[i] - fingerprint2[i]);
-  // }
-  // printf("L1: %.5f\n", diff_l1 / hashSize);
-  //
-  // double diff_l2 = 0;
-  // for (int i = 0; i < hashSize; i++) {
-  //   diff_l2 += pow(fingerprint1[i] - fingerprint2[i], 2);
-  // }
-  // printf("L2: %.5f\n", sqrt(diff_l2));
+  printf("%.5f\n", (1 - (diff / hashSize)) * 100);
 
   free(hash1);
   free(hash2);
